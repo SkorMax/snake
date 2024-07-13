@@ -7,6 +7,68 @@ const CELL_SIZE = 20;
 // Генерація випавдкового числа
 const randomCoordinate = () => Math.floor(Math.random() * GRID_SIZE);
 
+// Фетч запит GET
+const getStatistics = () => {
+  const url =
+    "https://api.jsonsilo.com/public/37ed75eb-f2d0-4b1f-96dd-42fd2597d3c6";
+  const headers = {
+    "Content-Type": "application/json",
+  };
+
+  return fetch(url, {
+    method: "GET",
+    headers: headers,
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Network response was not ok");
+      }
+      return response.json();
+    })
+    .then((data) => {
+      return data;
+    })
+    .catch((error) => {
+      console.error("There was a problem with the fetch operation:", error);
+    });
+};
+
+const apiKey =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX3V1aWQiOiJvOE9GN1BTSlFUZXJBSGxXeGZtb3g2dXI2UzIzIiwiaXNzIjoiaHR0cHM6Ly9qc29uc2lsby5jb20iLCJleHAiOjE3MjM0Njk5MDd9.Ns6bHn25xdxTr5OtuBiKgwCeHgbyO_pgL_G-3mV46oA";
+
+const savePoints = async (name, points) => {
+  const statistics = await getStatistics();
+
+  statistics[name] = points;
+
+  const url =
+    "https://api.jsonsilo.com/api/v1/manage/37ed75eb-f2d0-4b1f-96dd-42fd2597d3c6";
+
+  const headers = {
+    accept: "application/json",
+    "X-MAN-API": apiKey,
+    "Content-Type": "application/json",
+  };
+
+  fetch(url, {
+    method: "PATCH",
+    headers: headers,
+    body: JSON.stringify(statistics),
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error("Network response was not ok");
+      }
+      return response.json();
+    })
+    .then((data) => {
+      console.log("PATCH request successful:", data);
+    })
+    .catch((error) => {
+      console.error("There was a problem with the PATCH request:", error);
+    });
+};
+
 const Game = () => {
   const [snake, setSnake] = useState([{ x: 10, y: 10 }]);
   const [food, setFood] = useState({
@@ -17,10 +79,31 @@ const Game = () => {
   const [gameActive, setGameActive] = useState(false);
   const [currentPoints, setCurrentPoints] = useState(0);
   const [userName, setUserName] = useState("");
+  const [statistics, setStatistics] = useState([]);
+  const [savedPoints, setSavedPoints] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
 
   const startGame = () => {
+    setGameOver(false);
     setGameActive(true);
   };
+
+  useEffect(() => {
+    getStatistics().then((data) => {
+      const readyData = [];
+      for (const [key, value] of Object.entries(data)) {
+        if (key === userName) {
+          setSavedPoints(value);
+        }
+        readyData.push(
+          <li>
+            {key} : {value}
+          </li>
+        );
+      }
+      setStatistics(readyData);
+    });
+  }, [currentPoints, userName]);
 
   // Логіка переміщення змійки
   useEffect(() => {
@@ -48,7 +131,9 @@ const Game = () => {
         tail.find((segment) => segment.x === head.x && segment.y === head.y)
       ) {
         alert("Битва програна, але війна не закінчена");
-        setCurrentPoints(0);
+        setGameOver(true);
+        // setStateUser();
+        // setCurrentPoints(0);
         setSnake([{ x: 10, y: 10 }]);
         setDirection("RIGHT");
         return;
@@ -75,6 +160,13 @@ const Game = () => {
     return () => clearInterval(interval);
   }, [snake, direction, food, gameActive]);
 
+  useEffect(() => {
+    if (gameOver && currentPoints > savedPoints) {
+      savePoints(userName, currentPoints);
+      setCurrentPoints(0);
+    }
+  }, [savedPoints, gameOver, currentPoints, userName]);
+
   // Слухач подій натиску клавіш для направлення змійки
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -92,7 +184,7 @@ const Game = () => {
           if (direction !== "LEFT") setDirection("RIGHT");
           break;
         case " ":
-          gameActive ? setGameActive(false) : setGameActive(true);
+          setGameActive((gameActive) => !gameActive);
         default:
           break;
       }
@@ -103,33 +195,33 @@ const Game = () => {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [direction]);
 
-  const addPoints = () => {
-    setCurrentPoints(currentPoints + 10);
-  };
+  const addPoints = () => setCurrentPoints(currentPoints + 10);
 
   return (
-    <Box>
-      <br />
-      {gameActive === true ? (
-        <Grid>
-          {snake.map((segment, index) => (
-            <Cell key={index} x={segment.x} y={segment.y} />
-          ))}
-          <FoodCell x={food.x} y={food.y} />
-        </Grid>
-      ) : null}
-      <Button onClick={startGame}>Start</Button>
-      <Counter>{currentPoints}</Counter>
-      <h1>Введи своє ім'я, воїне</h1>
-      <form>
+    <>
+      <Box>
+        <br />
+        {gameActive && !gameOver ? (
+          <Grid>
+            {snake.map((segment, index) => (
+              <Cell key={index} x={segment.x} y={segment.y} />
+            ))}
+            <FoodCell x={food.x} y={food.y} />
+          </Grid>
+        ) : null}
+        <Button onClick={startGame}>Start</Button>
+        <Counter>{currentPoints}</Counter>
+        <h1>Введи своє ім'я, воїне</h1>
         <Input
           value={userName}
           onChange={(e) => setUserName(e.target.value)}
           placeholder="Введи своє ім'я"
         />
-        <Button onClick={handleSubmit}>Записатись</Button>
-      </form>
-    </Box>
+      </Box>
+      <aside>
+        <List>{statistics}</List>
+      </aside>
+    </>
   );
 };
 
@@ -185,4 +277,33 @@ const Input = styled.input`
   margin: 10px;
 `;
 
+const List = styled.ol`
+  border: 1px solid black;
+  background-color: #282c34;
+  color: white;
+  margin: 20px;
+`;
+
 export default Game;
+
+// const url = 'https://api.jsonsilo.com/public/37ed75eb-f2d0-4b1f-96dd-42fd2597d3c6';
+// const headers = {
+//     'Content-Type': 'application/json'
+// };
+
+// fetch(url, {
+//     method: 'GET',
+//     headers: headers
+// })
+// .then(response => {
+//     if (!response.ok) {
+//         throw new Error('Network response was not ok');
+//     }
+//     return response.json();
+// })
+// .then(data => {
+//     console.log(data);
+// })
+// .catch(error => {
+//     console.error('There was a problem with the fetch operation:', error);
+// });
